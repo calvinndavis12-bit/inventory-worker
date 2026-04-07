@@ -305,7 +305,7 @@ export async function syncClient(clientId, env) {
 
   // Get client config
   const clients = await supa.from('clients').selectWhere(
-    'id,name,inventory_source,dutchie_api_key,website_url,sync_enabled',
+    '*',
     { id: clientId }
   );
   const client = clients?.[0];
