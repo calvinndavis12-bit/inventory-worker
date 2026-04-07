@@ -72,7 +72,7 @@ function makeSupabase(url, key) {
       throw new Error(`Supabase ${options.method || 'GET'} ${table}: ${res.status} ${text}`);
     }
 
-    return options.method === 'GET' ? res.json() : null;
+    return (!options.method || options.method === 'GET') ? res.json() : null;
   }
 
   return {
