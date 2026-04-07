@@ -173,15 +173,16 @@ async function detectAndScrape(websiteUrl) {
 
   if (dutchieSlug) {
     return { products: await fetchDutchieEmbedMenu(dutchieSlug), platform: 'dutchie_embed' };
-  }
+// Check for Jane / iHeartJane — prefer URL-based match (more reliable than generic storeId)
+const janeUrlMatch = html.match(/iheartjane\.com[^"'<\s]*?\/stores?\/(\d+)/i);
+// Only fall back to storeId JSON if it's clearly inside a Jane-related context
+const janeCtxMatch = html.match(/iheartjane[^}]{0,300}?['"](storeId|store_id)['"]\s*:\s*['""]?(\d+)/is);
+const janeId = janeUrlMatch?.[1] || janeCtxMatch?.[2];
 
-  // Check for Jane / iHeartJane
-  const janeId = (html.match(/iheartjane\.com[^"]*?\/stores?\/(\d+)/i)
-    || html.match(/"storeId"\s*:\s*(\d+)/i))?.[1];
-
-  if (janeId) {
-    return { products: await fetchJaneMenu(janeId), platform: 'jane' };
-  }
+if (janeId) {
+  console.log(`[Scraper] Detected Jane store ID: ${janeId} from ${websiteUrl}`);
+  return { products: await fetchJaneMenu(janeId), platform: 'jane' };
+}
 
   // Generic HTML parse using regex (no cheerio in Workers)
   return { products: scrapeHtmlProducts(html, websiteUrl), platform: 'generic_html' };
@@ -220,33 +221,49 @@ async function fetchDutchieEmbedMenu(slug) {
     };
   });
 }
-
 async function fetchJaneMenu(storeId) {
-  const res = await fetch(`https://api.iheartjane.com/v1/stores/${storeId}/menu`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CannaFlowBot/1.0)' },
-  });
-  if (!res.ok) throw new Error(`Jane API: ${res.status}`);
-  const json = await res.json();
-  const raw = json?.data?.products || json?.products || [];
+  // Jane's API has evolved — try known endpoints in order
+  const endpoints = [
+    `https://api.iheartjane.com/v1/stores/${storeId}/menu-products?page=1&per_page=500`,
+    `https://api.iheartjane.com/v2/stores/${storeId}/products?per_page=500`,
+    `https://api.iheartjane.com/v1/stores/${storeId}/menu`,
+  ];
 
-  return raw.map(p => ({
-    id: `jane_${p.id || p.product_id}`,
-    source_id: String(p.id || p.product_id),
-    name: p.name || p.product_name || '',
-    brand: p.brand || p.brand_name || '',
-    category: normalizeCategory(p.kind || p.category || ''),
-    description: p.description || '',
-    price: p.price_each ?? p.price ?? 0,
-    in_stock: p.available !== false,
-    quantity: p.available_count ?? -1,
-    thc: p.percent_thc ? parseFloat(p.percent_thc) : null,
-    cbd: p.percent_cbd ? parseFloat(p.percent_cbd) : null,
-    strain_type: p.kind || null,
-    effects: p.activities || [],
-    images: p.image ? [p.image] : [],
-    variants: [],
-    source: 'scraper',
-  }));
+  const reqHeaders = {
+    'User-Agent': 'Mozilla/5.0 (compatible; CannaFlowBot/1.0)',
+    'Accept': 'application/json',
+  };
+
+  let lastStatus = null;
+  for (const url of endpoints) {
+    const res = await fetch(url, { headers: reqHeaders });
+    console.log(`[Jane] ${url} → ${res.status}`);
+    if (res.ok) {
+      const json = await res.json();
+      // Handle different response shapes across API versions
+      const raw = json?.data?.products || json?.menu_products || json?.products || json?.data || [];
+      return Array.isArray(raw) ? raw.map(p => ({
+        id: `jane_${p.id || p.product_id}`,
+        source_id: String(p.id || p.product_id),
+        name: p.name || p.product_name || '',
+        brand: p.brand || p.brand_name || '',
+        category: normalizeCategory(p.kind || p.category || ''),
+        description: p.description || '',
+        price: p.price_each ?? p.price ?? 0,
+        in_stock: p.available !== false,
+        quantity: p.available_count ?? -1,
+        thc: p.percent_thc ? parseFloat(p.percent_thc) : null,
+        cbd: p.percent_cbd ? parseFloat(p.percent_cbd) : null,
+        strain_type: p.kind || null,
+        effects: p.activities || [],
+        images: p.image ? [p.image] : [],
+        variants: [],
+        source: 'scraper',
+      })) : [];
+    }
+    lastStatus = res.status;
+  }
+  throw new Error(`Jane API: all endpoints returned ${lastStatus} for store ${storeId}`);
 }
 
 function scrapeHtmlProducts(html, siteUrl) {
