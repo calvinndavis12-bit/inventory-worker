@@ -1,2 +1,6 @@
+name = "inventory-worker"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
 [triggers]
 crons = ["*/15 * * * *"]
