@@ -42,7 +42,6 @@ function makeSupabase(url, key) {
     'apikey': key,
     'Authorization': `Bearer ${key}`,
     'Content-Type': 'application/json',
-    'Prefer': 'return=minimal',
   };
 
   async function query(table, options = {}) {
