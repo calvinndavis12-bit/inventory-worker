@@ -342,7 +342,7 @@ export async function syncClient(clientId, env) {
 
       // Supabase upsert in batches of 200
       for (let i = 0; i < rows.length; i += 200) {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/menu_items`, {
           method: 'POST',
           headers: {
             'apikey': env.SUPABASE_SERVICE_KEY,
@@ -357,7 +357,7 @@ export async function syncClient(clientId, env) {
       // Delete products no longer in feed
       const currentIds = products.map(p => p.id);
       await fetch(
-        `${env.SUPABASE_URL}/rest/v1/products?client_id=eq.${clientId}&id=not.in.(${currentIds.map(id => `"${id}"`).join(',')})`,
+        `${env.SUPABASE_URL}/rest/v1/menu_items?client_id=eq.${clientId}&id=not.in.(${currentIds.map(id => `"${id}"`).join(',')})`,
         {
           method: 'DELETE',
           headers: {
@@ -408,7 +408,7 @@ export async function syncAll(env) {
 
 export async function getProducts(clientId, env, filters = {}) {
   const supa = makeSupabase(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
-  let products = await supa.from('products').selectWhere('*', { client_id: clientId });
+  let products = await supa.from('menu_items').selectWhere('*', { client_id: clientId });
 
   if (filters.inStockOnly !== false) products = products.filter(p => p.in_stock);
   if (filters.category) products = products.filter(p => p.category === filters.category);
