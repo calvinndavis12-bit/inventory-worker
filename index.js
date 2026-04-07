@@ -37,6 +37,20 @@ export default {
         return Response.json(summary, { headers: corsHeaders });
       }
 
+      // GET /api/debug/:clientId — test Supabase connection and return raw client data
+      if (url.pathname.startsWith('/api/debug/')) {
+        const clientId = url.pathname.split('/')[3];
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/clients?select=*&id=eq.${clientId}`, {
+          headers: {
+            'apikey': env.SUPABASE_SERVICE_KEY,
+            'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        const data = await res.json();
+        return Response.json({ httpStatus: res.status, rows: data }, { headers: corsHeaders });
+      }
+
       return new Response('CannaFlow Inventory Worker', { status: 200, headers: corsHeaders });
 
     } catch (err) {
