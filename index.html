@@ -10,47 +10,69 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #fafaf8; --surface: #ffffff; --surface2: #f4f3ef; --surface3: #eceae4;
-  --text: #1c1b18; --text2: #5a5850; --text3: #9b9890;
-  --border: rgba(28,27,24,0.08); --border2: rgba(28,27,24,0.14);
-  --green: #1a8f68; --green-bg: #eaf6f1; --green-dark: #0f6049;
-  --amber: #c47c1a; --amber-bg: #fdf3e3;
-  --red: #b83232; --red-bg: #fdf0f0;
-  --purple: #6b4fa0; --purple-bg: #f3f0f9;
-  --blue: #2563a8; --blue-bg: #eef4fc;
-  --radius: 8px; --radius-lg: 14px;
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface2: #f4f3ef;
+  --surface3: #eceae4;
+  --text: #1c1b18;
+  --text2: #5a5850;
+  --text3: #9b9890;
+  --border: rgba(28,27,24,0.08);
+  --border2: rgba(28,27,24,0.14);
+  --green: #1a8f68;
+  --green-bg: #eaf6f1;
+  --green-dark: #0f6049;
+  --amber: #c47c1a;
+  --amber-bg: #fdf3e3;
+  --red: #b83232;
+  --red-bg: #fdf0f0;
+  --radius: 8px;
+  --radius-lg: 14px;
   --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-modal: 0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08);
 }
 body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
 
+/* LOGIN */
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 40px; width: 400px; box-shadow: var(--shadow-modal); animation: slideUp 0.2s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.login-logo { font-size: 22px; font-weight: 500; letter-spacing: -0.5px; margin-bottom: 6px; }
+.login-logo em { color: var(--green); font-style: normal; }
+.login-sub { font-size: 13px; color: var(--text3); margin-bottom: 28px; }
+.login-field { margin-bottom: 14px; }
+.login-label { font-size: 12px; font-weight: 500; color: var(--text2); display: block; margin-bottom: 5px; }
+.login-input { width: 100%; font-size: 14px; font-family: 'DM Sans', sans-serif; padding: 9px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; }
+.login-input:focus { border-color: var(--green); }
+.login-btn { width: 100%; margin-top: 4px; padding: 10px; background: var(--green); color: white; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; border: none; border-radius: var(--radius); cursor: pointer; transition: background 0.15s; }
+.login-btn:hover { background: var(--green-dark); }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-error { margin-top: 12px; font-size: 13px; color: var(--red); background: var(--red-bg); padding: 9px 12px; border-radius: var(--radius); display: none; }
+.login-forgot { display: block; text-align: center; margin-top: 14px; font-size: 13px; color: var(--text3); }
+
+/* TOPBAR */
 .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 58px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; }
 .logo { font-size: 18px; font-weight: 500; letter-spacing: -0.5px; }
 .logo em { color: var(--green); font-style: normal; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .client-chip { font-size: 12px; font-family: 'DM Mono', monospace; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; color: var(--text2); }
-.sync-status-bar { font-size: 11px; font-family: 'DM Mono', monospace; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; background: var(--surface2); border: 1px solid var(--border); }
-.sync-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.sync-dot.success { background: var(--green); box-shadow: 0 0 5px var(--green); }
-.sync-dot.error { background: var(--red); }
-.sync-dot.syncing { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
-.sync-dot.pending { background: var(--text3); }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.save-status { font-size: 12px; color: var(--green); opacity: 0; transition: opacity 0.3s; display: flex; align-items: center; gap: 5px; }
+.save-status.show { opacity: 1; }
+.logout-link { font-size: 12px; color: var(--text3); cursor: pointer; padding: 4px 8px; border-radius: var(--radius); transition: background 0.12s; }
+.logout-link:hover { background: var(--surface2); color: var(--text2); }
 
-.main { max-width: 1180px; margin: 0 auto; padding: 2rem; }
-
+/* MAIN */
+.main { max-width: 1140px; margin: 0 auto; padding: 2rem; }
 .tabs { display: flex; gap: 2px; margin-bottom: 1.5rem; background: var(--surface2); border-radius: var(--radius); padding: 3px; width: fit-content; }
 .tab { font-size: 13px; font-weight: 500; padding: 7px 18px; cursor: pointer; color: var(--text3); border-radius: 6px; border: none; background: transparent; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
 .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tab:hover:not(.active) { color: var(--text2); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
-.count-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-family: 'DM Mono', monospace; background: var(--surface2); color: var(--text3); border-radius: 10px; padding: 1px 7px; margin-left: 6px; }
-.tab.active .count-badge { background: var(--surface3); }
-
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
-.search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 280px; }
+.search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 300px; }
 .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
-.search-input { width: 100%; font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 12px 8px 32px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; }
+.search-input { width: 100%; font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 12px 8px 34px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; }
 .search-input:focus { border-color: var(--green); }
 .filter-select { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text2); outline: none; cursor: pointer; }
 .btn-primary { font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; padding: 8px 18px; border: none; border-radius: var(--radius); background: var(--green); color: white; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
@@ -58,47 +80,44 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .btn-ghost { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 14px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text2); cursor: pointer; transition: background 0.15s; }
 .btn-ghost:hover { background: var(--surface2); }
 
-/* Inventory table */
+/* TABLE */
 .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); }
-.table-head { display: grid; grid-template-columns: 2fr 110px 100px 90px 70px 80px 70px; gap: 8px; padding: 10px 18px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+.table-head { display: grid; gap: 8px; padding: 10px 18px; background: var(--surface2); border-bottom: 1px solid var(--border); }
 .col-h { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-family: 'DM Mono', monospace; }
-.product-row { display: grid; grid-template-columns: 2fr 110px 100px 90px 70px 80px 70px; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); align-items: center; cursor: pointer; transition: background 0.1s; }
-.product-row:last-child { border-bottom: none; }
-.product-row:hover { background: var(--bg); }
-.p-name { font-size: 13px; font-weight: 500; color: var(--text); }
-.p-brand { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 1px; }
-.p-price { font-size: 13px; color: var(--text2); font-family: 'DM Mono', monospace; }
+.inv-head { grid-template-columns: 2fr 100px 80px 70px 80px 100px; }
+.inv-row  { grid-template-columns: 2fr 100px 80px 70px 80px 100px; }
+.leads-head { grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr; }
+.leads-row  { grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr; }
+.data-row { display: grid; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); align-items: center; transition: background 0.1s; }
+.data-row:last-child { border-bottom: none; }
+.data-row:hover { background: var(--bg); }
+.d-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.d-sub  { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 1px; }
+.d-mono { font-size: 13px; color: var(--text2); font-family: 'DM Mono', monospace; }
 .pill { display: inline-flex; align-items: center; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
-.pill-flower  { background: var(--green-bg); color: var(--green-dark); }
-.pill-vape    { background: var(--blue-bg); color: var(--blue); }
-.pill-edible  { background: var(--amber-bg); color: var(--amber); }
-.pill-concentrate { background: var(--purple-bg); color: var(--purple); }
-.pill-preroll { background: #f0fdf4; color: #166534; }
-.pill-tincture { background: #fef9c3; color: #713f12; }
-.pill-topical { background: #fff7ed; color: #9a3412; }
-.pill-other   { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
-.pill-instock { background: var(--green-bg); color: var(--green-dark); }
-.pill-oos     { background: var(--red-bg); color: var(--red); }
-.strain-indica { font-size: 11px; color: #6b4fa0; background: #f3f0f9; padding: 2px 8px; border-radius: 20px; }
-.strain-sativa { font-size: 11px; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 20px; }
-.strain-hybrid { font-size: 11px; color: #065f46; background: #d1fae5; padding: 2px 8px; border-radius: 20px; }
-.btn-edit { font-size: 11px; font-family: 'DM Sans', sans-serif; padding: 5px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; }
-.btn-edit:hover { background: var(--surface2); }
-.source-tag { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--text3); }
-.source-tag.auto { color: var(--green); }
-.empty-state { padding: 4rem 2rem; text-align: center; color: var(--text3); font-size: 13px; }
+.pill-green { background: var(--green-bg); color: var(--green-dark); }
+.pill-amber { background: var(--amber-bg); color: var(--amber); }
+.pill-gray  { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
 .loading-row { padding: 3rem; text-align: center; color: var(--text3); font-size: 13px; }
+.empty-state { padding: 4rem 2rem; text-align: center; color: var(--text3); font-size: 13px; }
 .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--green); border-radius: 50%; animation: spin 0.65s linear infinite; vertical-align: middle; margin-right: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Sync info bar */
-.sync-info { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; font-size: 12px; color: var(--text3); }
-.sync-info strong { color: var(--text2); font-weight: 500; }
-.sync-now-btn { margin-left: auto; font-size: 12px; padding: 5px 14px; border: 1px solid var(--border2); border-radius: var(--radius); background: transparent; color: var(--text2); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.12s; }
-.sync-now-btn:hover { background: var(--surface2); }
-.sync-now-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* STATS */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; box-shadow: var(--shadow); }
+.stat-label { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-family: 'DM Mono', monospace; margin-bottom: 8px; }
+.stat-value { font-size: 28px; font-weight: 500; color: var(--text); letter-spacing: -0.5px; }
+.stat-meta { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.status-row { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; box-shadow: var(--shadow); }
+.s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: var(--green); box-shadow: 0 0 5px rgba(26,143,104,0.4); }
+.dot-amber { background: var(--amber); }
+.dot-gray  { background: var(--text3); }
+.s-label  { font-size: 13px; font-weight: 500; }
+.s-detail { font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; margin-left: auto; }
 
-/* Deals */
+/* DEALS */
 .deals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .deal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--shadow); transition: opacity 0.2s, border-color 0.2s; }
 .deal-card.inactive { opacity: 0.4; }
@@ -115,32 +134,29 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .toggle-btn::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: white; top: 3px; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 .toggle-btn.on::after { left: 19px; }
 .toggle-btn.off::after { left: 3px; }
+.btn-edit { font-size: 11px; font-family: 'DM Sans', sans-serif; padding: 5px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; }
+.btn-edit:hover { background: var(--surface2); }
 
-/* Modals */
+/* MODAL */
 .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px); }
 .overlay.open { display: flex; }
-.modal { background: var(--surface); border-radius: var(--radius-lg); width: 580px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-modal); animation: slideUp 0.18s ease; }
-@keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.modal { background: var(--surface); border-radius: var(--radius-lg); width: 560px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-modal); animation: slideUp 0.18s ease; }
 .modal-header { padding: 20px 24px 16px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2; }
 .modal-title { font-size: 16px; font-weight: 500; }
 .modal-subtitle { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: 'DM Mono', monospace; }
-.modal-close { font-size: 22px; color: var(--text3); cursor: pointer; background: none; border: none; line-height: 1; }
+.modal-close { font-size: 22px; color: var(--text3); cursor: pointer; background: none; border: none; line-height: 1; padding: 2px; transition: color 0.12s; }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 20px 24px; }
-.form-section { margin-bottom: 22px; }
-.form-section-title { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-family: 'DM Mono', monospace; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.form-full { grid-column: 1/-1; }
+.form-full { grid-column: 1 / -1; }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-label { font-size: 12px; font-weight: 500; color: var(--text2); }
 .form-hint { font-size: 11px; color: var(--text3); font-weight: 400; }
 .form-input, .form-select, .form-textarea { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 11px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; width: 100%; }
 .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--green); }
 .form-textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
-.mono { font-family: 'DM Mono', monospace; }
-.checkboxes { display: flex; gap: 20px; }
 .check-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); cursor: pointer; }
-.check-label input { width: 15px; height: 15px; accent-color: var(--green); cursor: pointer; }
+.check-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--green); cursor: pointer; }
 .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface); position: sticky; bottom: 0; }
 .btn-danger { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 14px; border: 1px solid rgba(184,50,50,0.3); border-radius: var(--radius); background: transparent; color: var(--red); cursor: pointer; transition: background 0.12s; }
 .btn-danger:hover { background: var(--red-bg); }
@@ -148,181 +164,177 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .btn-save { font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; padding: 8px 22px; border: none; border-radius: var(--radius); background: var(--green); color: white; cursor: pointer; transition: background 0.15s; }
 .btn-save:hover { background: var(--green-dark); }
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Toast */
 .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--text); color: white; font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 11px 22px; border-radius: var(--radius); z-index: 999; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.success { background: var(--green-dark); }
 .toast.error { background: var(--red); }
-
-.auto-note { font-size: 11px; color: var(--text3); font-style: italic; margin-top: 4px; }
-
-@media(max-width:900px){
-  .table-head,.product-row { grid-template-columns: 2fr 90px 70px 70px; }
-  .table-head > *:nth-child(n+5), .product-row > *:nth-child(n+5) { display:none; }
-  .deals-grid { grid-template-columns: 1fr; }
-}
+.count-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-family: 'DM Mono', monospace; background: var(--surface2); color: var(--text3); border-radius: 10px; padding: 1px 7px; margin-left: 6px; }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="logo">Canna<em>Flow</em></div>
-  <div class="topbar-right">
-    <div class="sync-status-bar" id="sync-bar">
-      <div class="sync-dot pending" id="sync-dot"></div>
-      <span id="sync-text">Loading...</span>
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">Canna<em>Flow</em></div>
+    <div class="login-sub">Sign in to your client portal</div>
+    <div class="login-field">
+      <label class="login-label">Email</label>
+      <input class="login-input" type="email" id="login-email" placeholder="you@dispensary.com" autocomplete="email"/>
     </div>
-    <div class="client-chip" id="client-chip">Loading...</div>
+    <div class="login-field">
+      <label class="login-label">Password</label>
+      <input class="login-input" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+    <span class="login-forgot">Forgot your password?</span>
   </div>
 </div>
 
-<div class="main">
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab(event,'inventory')">Inventory <span class="count-badge" id="inv-count">—</span></button>
-    <button class="tab" onclick="switchTab(event,'deals')">Deals <span class="count-badge" id="deal-count">—</span></button>
-  </div>
-
-  <!-- Inventory tab -->
-  <div class="tab-panel active" id="tab-inventory">
-    <div class="sync-info" id="sync-info-bar">
-      <span id="sync-detail">Checking sync status...</span>
-      <button class="sync-now-btn" id="sync-now-btn" onclick="triggerSync()">↻ Sync now</button>
-    </div>
-    <div class="toolbar">
-      <div class="search-wrap">
-        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input class="search-input" id="search-input" placeholder="Search products..." oninput="filterInventory()">
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="topbar">
+    <div class="logo">Canna<em>Flow</em></div>
+    <div class="topbar-right">
+      <div class="save-status" id="save-status">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Saved
       </div>
-      <select class="filter-select" id="cat-filter" onchange="filterInventory()">
-        <option value="">All categories</option>
-        <option value="flower">Flower</option>
-        <option value="pre-roll">Pre-Rolls</option>
-        <option value="vape">Vapes</option>
-        <option value="concentrate">Concentrates</option>
-        <option value="edible">Edibles</option>
-        <option value="tincture">Tinctures</option>
-        <option value="topical">Topicals</option>
-        <option value="cbd">CBD</option>
-        <option value="other">Other</option>
-      </select>
-      <select class="filter-select" id="stock-filter" onchange="filterInventory()">
-        <option value="">All items</option>
-        <option value="instock">In stock only</option>
-        <option value="oos">Out of stock</option>
-      </select>
-      <button class="btn-primary" onclick="openProductModal(null)">+ Add product</button>
-    </div>
-    <div class="table-card">
-      <div class="table-head">
-        <div class="col-h">Product</div>
-        <div class="col-h">Category</div>
-        <div class="col-h">Strain</div>
-        <div class="col-h">THC / CBD</div>
-        <div class="col-h">Price</div>
-        <div class="col-h">Stock</div>
-        <div></div>
-      </div>
-      <div id="product-list"><div class="loading-row"><span class="spinner"></span>Loading inventory...</div></div>
+      <div class="client-chip" id="client-chip">Loading...</div>
+      <span class="logout-link" onclick="doLogout()">Sign out</span>
     </div>
   </div>
 
-  <!-- Deals tab -->
-  <div class="tab-panel" id="tab-deals">
-    <div class="toolbar">
-      <div style="font-size:13px;color:var(--text2);flex:1">Toggle deals on/off — your bot updates within 5 minutes.</div>
-      <button class="btn-primary" onclick="openDealModal(null)">+ Add deal</button>
+  <div class="main">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab(event,'overview')">Overview</button>
+      <button class="tab" onclick="switchTab(event,'inventory')">Inventory <span class="count-badge" id="inventory-count">—</span></button>
+      <button class="tab" onclick="switchTab(event,'deals')">Deals <span class="count-badge" id="deal-count">—</span></button>
+      <button class="tab" onclick="switchTab(event,'leads')">Leads <span class="count-badge" id="leads-count">—</span></button>
     </div>
-    <div class="deals-grid" id="deals-grid"><div class="loading-row" style="grid-column:1/-1"><span class="spinner"></span>Loading deals...</div></div>
-  </div>
-</div>
 
-<!-- Product modal -->
-<div class="overlay" id="product-overlay" onclick="if(event.target.id==='product-overlay')closeModal('product-overlay')">
-  <div class="modal">
-    <div class="modal-header">
-      <div>
-        <div class="modal-title" id="pm-title">Add product</div>
-        <div class="modal-subtitle" id="pm-sub">manual entry</div>
+    <!-- OVERVIEW -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">In Stock</div>
+          <div class="stat-value" id="ov-instock">—</div>
+          <div class="stat-meta" id="ov-total">of — products</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Deals</div>
+          <div class="stat-value" id="ov-deals">—</div>
+          <div class="stat-meta">bot is promoting these</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Leads Captured</div>
+          <div class="stat-value" id="ov-leads">—</div>
+          <div class="stat-meta">from chat widget</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Last Sync</div>
+          <div class="stat-value" style="font-size:18px;padding-top:4px" id="ov-sync">—</div>
+          <div class="stat-meta" id="ov-platform">—</div>
+        </div>
       </div>
-      <button class="modal-close" onclick="closeModal('product-overlay')">×</button>
+      <div id="status-list"><div class="loading-row"><span class="spinner"></span>Loading status...</div></div>
     </div>
-    <div class="modal-body">
-      <div class="form-section">
-        <div class="form-section-title">Basic info</div>
-        <div class="form-grid">
-          <div class="form-group form-full"><label class="form-label">Product name</label><input class="form-input" id="f-name" placeholder="Blue Dream 3.5g"></div>
-          <div class="form-group"><label class="form-label">Brand</label><input class="form-input" id="f-brand" placeholder="Jungle Boys"></div>
-          <div class="form-group"><label class="form-label">Category</label>
-            <select class="form-select" id="f-category">
-              <option value="flower">Flower</option><option value="pre-roll">Pre-Roll</option>
-              <option value="vape">Vape</option><option value="concentrate">Concentrate</option>
-              <option value="edible">Edible</option><option value="tincture">Tincture</option>
-              <option value="topical">Topical</option><option value="cbd">CBD</option><option value="other">Other</option>
-            </select>
-          </div>
-          <div class="form-group"><label class="form-label">Strain type</label>
-            <select class="form-select" id="f-strain">
-              <option value="">—</option><option value="indica">Indica</option>
-              <option value="sativa">Sativa</option><option value="hybrid">Hybrid</option>
-            </select>
-          </div>
-          <div class="form-group form-full"><label class="form-label">Description</label><textarea class="form-textarea" id="f-description" placeholder="Brief product description for the AI..."></textarea></div>
+
+    <!-- INVENTORY -->
+    <div class="tab-panel" id="tab-inventory">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input class="search-input" type="text" id="inv-search" placeholder="Search menu items..." oninput="filterInventory()"/>
         </div>
+        <select class="filter-select" id="inv-cat" onchange="filterInventory()">
+          <option value="">All categories</option>
+          <option value="flower">Flower</option>
+          <option value="pre-roll">Pre-roll</option>
+          <option value="vape">Vape</option>
+          <option value="concentrate">Concentrate</option>
+          <option value="edible">Edible</option>
+          <option value="tincture">Tincture</option>
+          <option value="topical">Topical</option>
+          <option value="other">Other</option>
+        </select>
+        <select class="filter-select" id="inv-stock" onchange="filterInventory()">
+          <option value="">All stock</option>
+          <option value="in">In stock</option>
+          <option value="out">Out of stock</option>
+        </select>
+        <button class="btn-primary" onclick="triggerSync()">↻ Sync inventory</button>
       </div>
-      <div class="form-section">
-        <div class="form-section-title">Potency & pricing</div>
-        <div class="form-grid">
-          <div class="form-group"><label class="form-label">THC %</label><input class="form-input mono" id="f-thc" type="number" step="0.1" placeholder="22.5"></div>
-          <div class="form-group"><label class="form-label">CBD %</label><input class="form-input mono" id="f-cbd" type="number" step="0.1" placeholder="0.5"></div>
-          <div class="form-group"><label class="form-label">Price ($)</label><input class="form-input mono" id="f-price" type="number" step="0.5" placeholder="45"></div>
-          <div class="form-group"><label class="form-label">Quantity on hand</label><input class="form-input mono" id="f-qty" type="number" placeholder="—  (leave blank if unknown)"></div>
+      <div class="table-card">
+        <div class="table-head inv-head">
+          <div class="col-h">Product</div>
+          <div class="col-h">Category</div>
+          <div class="col-h">Price</div>
+          <div class="col-h">THC</div>
+          <div class="col-h">Strain</div>
+          <div class="col-h">Status</div>
         </div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Effects & details</div>
-        <div class="form-grid">
-          <div class="form-group form-full"><label class="form-label">Effects <span class="form-hint">(comma-separated)</span></label><input class="form-input" id="f-effects" placeholder="Relaxed, Happy, Creative"></div>
-        </div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Availability</div>
-        <div class="checkboxes"><label class="check-label"><input type="checkbox" id="f-instock" checked> In stock</label></div>
-        <p class="auto-note" id="f-source-note"></p>
+        <div id="inventory-list"><div class="loading-row"><span class="spinner"></span>Loading inventory...</div></div>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn-danger" id="p-delete-btn" onclick="deleteProduct()" style="display:none">Delete</button>
-      <div class="footer-actions">
-        <button class="btn-ghost" onclick="closeModal('product-overlay')">Cancel</button>
-        <button class="btn-save" id="p-save-btn" onclick="saveProduct()">Save</button>
+
+    <!-- DEALS -->
+    <div class="tab-panel" id="tab-deals">
+      <div class="toolbar">
+        <div style="font-size:13px;color:var(--text2);flex:1">Toggle deals on/off — your bot updates within 5 minutes.</div>
+        <button class="btn-primary" onclick="openDealModal(null)">+ Add deal</button>
+      </div>
+      <div class="deals-grid" id="deals-grid">
+        <div class="loading-row" style="grid-column:1/-1"><span class="spinner"></span>Loading deals...</div>
+      </div>
+    </div>
+
+    <!-- LEADS -->
+    <div class="tab-panel" id="tab-leads">
+      <div class="toolbar">
+        <div style="font-size:13px;color:var(--text2);flex:1">Customers who shared contact info through your AI chat widget.</div>
+        <button class="btn-ghost" onclick="exportLeads()">↓ Export CSV</button>
+      </div>
+      <div class="table-card">
+        <div class="table-head leads-head">
+          <div class="col-h">Email</div>
+          <div class="col-h">Name</div>
+          <div class="col-h">Phone</div>
+          <div class="col-h">Source</div>
+          <div class="col-h">Date</div>
+        </div>
+        <div id="leads-list"><div class="loading-row"><span class="spinner"></span>Loading leads...</div></div>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Deal modal -->
-<div class="overlay" id="deal-overlay" onclick="if(event.target.id==='deal-overlay')closeModal('deal-overlay')">
+<div class="overlay" id="deal-overlay" onclick="overlayClick(event,'deal-overlay')">
   <div class="modal">
     <div class="modal-header">
-      <div><div class="modal-title" id="dm-title">Add deal</div><div class="modal-subtitle" id="dm-id"></div></div>
+      <div>
+        <div class="modal-title" id="dm-title">Edit deal</div>
+        <div class="modal-subtitle" id="dm-id"></div>
+      </div>
       <button class="modal-close" onclick="closeModal('deal-overlay')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid">
-        <div class="form-group form-full"><label class="form-label">Deal name</label><input class="form-input" id="d-name"></div>
-        <div class="form-group form-full"><label class="form-label">Description</label><textarea class="form-textarea" id="d-desc"></textarea></div>
-        <div class="form-group"><label class="form-label">Call to action</label><input class="form-input" id="d-cta" placeholder="Shop Now"></div>
-        <div class="form-group"><label class="form-label">Shop URL</label><input class="form-input mono" id="d-url" placeholder="/menu"></div>
-        <div class="form-group form-full"><label class="form-label">Bot guidance notes <span class="form-hint">(not shown to customers)</span></label><input class="form-input" id="d-notes"></div>
-        <div class="form-group form-full"><label class="check-label"><input type="checkbox" id="d-active"> Active — bot promotes this deal</label></div>
+        <div class="form-group form-full"><label class="form-label">Deal name</label><input class="form-input" id="d-name" placeholder="e.g. First-time patient discount"/></div>
+        <div class="form-group form-full"><label class="form-label">Description</label><textarea class="form-textarea" id="d-desc" placeholder="Describe the deal your bot will promote..."></textarea></div>
+        <div class="form-group"><label class="form-label">Call to action</label><input class="form-input" id="d-cta" placeholder="Shop Now"/></div>
+        <div class="form-group"><label class="form-label">URL <span class="form-hint">(optional)</span></label><input class="form-input" id="d-url" placeholder="https://yourdispensary.com/menu"/></div>
+        <div class="form-group form-full"><label class="form-label">Internal notes <span class="form-hint">(bot guidance, not shown to customers)</span></label><input class="form-input" id="d-notes" placeholder="e.g. Only mention for first-time patients"/></div>
+        <div class="form-group form-full"><label class="check-label"><input type="checkbox" id="d-active"/> Active — bot promotes this deal</label></div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-danger" id="d-delete-btn" onclick="deleteDeal()" style="display:none">Delete</button>
+      <button class="btn-danger" id="d-delete-btn" onclick="deleteDeal()" style="display:none">Delete deal</button>
       <div class="footer-actions">
         <button class="btn-ghost" onclick="closeModal('deal-overlay')">Cancel</button>
-        <button class="btn-save" id="d-save-btn" onclick="saveDeal()">Save</button>
+        <button class="btn-save" id="d-save-btn" onclick="saveDeal()">Save changes</button>
       </div>
     </div>
   </div>
@@ -331,241 +343,129 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 <div class="toast" id="toast"></div>
 
 <script>
-// ── Config ────────────────────────────────────────────────────────────────────
-const SUPA_URL  = 'https://pxbbmymmgszbxrfyktzk.supabase.co';
-const SUPA_KEY  = 'sb_publishable_8x-ZkoE7MuIIbpEpa8CHWQ_g1yNU02U';
-
-// Pass CLIENT_ID via URL param for multi-client use:
-// cannaflow-client-portal.html?client=abc123
-// Or hardcode a specific client's ID below for a dedicated portal URL.
-const params = new URLSearchParams(location.search);
-const CLIENT_ID = params.get('client') || 'YOUR_CLIENT_ID_HERE';
-
-// Your worker URL — used to trigger manual sync
-const WORKER_URL = params.get('worker') || 'https://shopflow-admin.calvinndavis12.workers.dev';
+const SUPA_URL = 'https://pxbbmymmgszbxrfyktzk.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4YmJteW1tZ3N6YnhyZnlrdHprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI2MTQsImV4cCI6MjA5MDA2ODYxNH0._qz5beDaaJvIdqYhYsAvo8701uyj0sRKeFmCrBTWV5s'; // ← replace with anon key
+const WORKER_URL = 'https://portal.gocannaflow.com';
 
 const db = supabase.createClient(SUPA_URL, SUPA_KEY);
-let allProducts = [], allDeals = [];
-let editProdId = null, editDealId = null;
+let SESSION = null, CLIENT_ID = null;
+let allItems = [], allDeals = [], allLeads = [];
+let editDealId = null;
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-async function init() {
-  await Promise.all([loadClient(), loadInventory(), loadDeals(), loadSyncStatus()]);
+// AUTH
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pw) { showLoginError('Please enter your email and password.'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pw });
+  if (error) { showLoginError(error.message); btn.disabled = false; btn.textContent = 'Sign in'; return; }
+  SESSION = data.session;
+  await loadDashboard();
 }
 
-async function loadClient() {
-  const { data } = await db.from('clients').select('name').eq('id', CLIENT_ID).single();
-  if (data) document.getElementById('client-chip').textContent = data.name;
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
 }
 
-async function loadSyncStatus() {
-  const { data } = await db.from('sync_status').select('*').eq('client_id', CLIENT_ID).single();
-  const dot  = document.getElementById('sync-dot');
-  const text = document.getElementById('sync-text');
-  const detail = document.getElementById('sync-detail');
+function doLogout() {
+  db.auth.signOut();
+  SESSION = null; CLIENT_ID = null;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-btn').disabled = false;
+  document.getElementById('login-btn').textContent = 'Sign in';
+}
 
-  if (!data) {
-    text.textContent = 'Not synced yet';
-    detail.textContent = 'No sync history — add your POS key in settings or add products manually.';
-    return;
-  }
+async function loadDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  const { data: clients } = await db.from('clients').select('*').eq('user_id', SESSION.user.id);
+  const client = clients?.[0];
+  CLIENT_ID = client?.id || SESSION.user.app_metadata?.client_id;
+  if (!CLIENT_ID) { document.getElementById('client-chip').textContent = 'Account not linked'; return; }
+  document.getElementById('client-chip').textContent = client?.name || 'Your Dispensary';
+  await Promise.all([loadOverview(), loadInventory(), loadDeals(), loadLeads()]);
+}
 
-  dot.className = 'sync-dot ' + (data.status || 'pending');
-  const age = data.last_synced_at ? formatAge(data.last_synced_at) : 'never';
-
-  if (data.status === 'success') {
-    text.textContent = `Synced ${age}`;
-    detail.innerHTML = `<strong>${data.product_count}</strong> products · <strong>${data.in_stock_count}</strong> in stock · via <strong>${data.platform || 'unknown'}</strong> · last synced ${age}`;
-  } else if (data.status === 'error') {
-    text.textContent = 'Sync error';
-    detail.innerHTML = `<span style="color:var(--red)">Error: ${data.error}</span> — check your API key or website URL`;
-  } else if (data.status === 'syncing') {
-    text.textContent = 'Syncing...';
-    detail.textContent = 'Sync in progress...';
+// OVERVIEW
+async function loadOverview() {
+  const [{ data: sync }, { data: leads }, { data: activeDeals }] = await Promise.all([
+    db.from('sync_status').select('*').eq('client_id', CLIENT_ID).single(),
+    db.from('leads').select('id').eq('client_id', CLIENT_ID),
+    db.from('deals').select('id').eq('client_id', CLIENT_ID).eq('active', true),
+  ]);
+  document.getElementById('ov-instock').textContent = sync?.in_stock_count ?? 0;
+  document.getElementById('ov-total').textContent = `of ${sync?.product_count ?? 0} products`;
+  document.getElementById('ov-deals').textContent = activeDeals?.length ?? 0;
+  document.getElementById('ov-leads').textContent = leads?.length ?? 0;
+  if (sync?.last_synced_at) {
+    document.getElementById('ov-sync').textContent = new Date(sync.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    document.getElementById('ov-platform').textContent = sync.platform || 'manual';
   } else {
-    text.textContent = 'Pending sync';
-    detail.textContent = 'Waiting for first sync.';
+    document.getElementById('ov-sync').textContent = 'Never';
+    document.getElementById('ov-platform').textContent = '—';
   }
+  const s = sync?.status || 'pending';
+  const dot = s === 'success' ? 'dot-green' : s === 'error' ? 'dot-amber' : 'dot-gray';
+  document.getElementById('status-list').innerHTML = `
+    <div class="status-row"><div class="s-dot ${dot}"></div><div class="s-label">Inventory Sync</div><div class="s-detail">${sync?.platform||'manual'} · ${sync?.product_count||0} products · ${s}</div></div>
+    <div class="status-row"><div class="s-dot dot-green"></div><div class="s-label">AI Budtender</div><div class="s-detail">Claude Haiku · live</div></div>
+    <div class="status-row"><div class="s-dot dot-green"></div><div class="s-label">Lead Capture</div><div class="s-detail">${leads?.length??0} total leads</div></div>`;
 }
 
-// ── Inventory ─────────────────────────────────────────────────────────────────
+// INVENTORY
 async function loadInventory() {
-  const { data, error } = await db.from('menu_items')
-    .select('*').eq('client_id', CLIENT_ID).order('category').order('name');
-  if (error) { showToast('Failed to load inventory', 'error'); return; }
-  allProducts = data || [];
-  document.getElementById('inv-count').textContent = allProducts.length;
-  renderInventory(allProducts);
+  const { data, error } = await db.from('menu_items').select('*').eq('client_id', CLIENT_ID).order('category').order('name');
+  if (error) { showToast('Failed to load inventory','error'); return; }
+  allItems = data || [];
+  document.getElementById('inventory-count').textContent = allItems.length;
+  renderInventory(allItems);
 }
-
-const CAT_PILL = {
-  flower: 'pill-flower', 'pre-roll': 'pill-preroll', vape: 'pill-vape',
-  concentrate: 'pill-concentrate', edible: 'pill-edible',
-  tincture: 'pill-tincture', topical: 'pill-topical', cbd: 'pill-flower',
-};
 
 function renderInventory(list) {
-  const el = document.getElementById('product-list');
-  if (!list.length) {
-    el.innerHTML = '<div class="empty-state">No products found. Add products manually or connect your POS system.</div>';
-    return;
-  }
-
-  el.innerHTML = list.map(p => {
-    const catClass = CAT_PILL[p.category] || 'pill-other';
-    const strainTag = p.strain_type
-      ? `<span class="strain-${p.strain_type}">${p.strain_type}</span>`
-      : '<span style="color:var(--text3);font-size:12px">—</span>';
-    const potency = [
-      p.thc != null ? `${p.thc}% THC` : null,
-      p.cbd != null ? `${p.cbd}% CBD` : null,
-    ].filter(Boolean).join(' · ') || '—';
-    const stockPill = p.in_stock
-      ? '<span class="pill pill-instock">In stock</span>'
-      : '<span class="pill pill-oos">Out of stock</span>';
-    const sourceTag = p.source !== 'manual'
-      ? `<span class="source-tag auto">auto</span>`
-      : `<span class="source-tag">manual</span>`;
-
-    return `<div class="product-row" onclick="openProductModal('${p.id}')">
-      <div>
-        <div class="p-name">${p.name}</div>
-        <div class="p-brand">${p.brand || ''} ${sourceTag}</div>
-      </div>
-      <div><span class="pill ${catClass}">${p.category}</span></div>
-      <div>${strainTag}</div>
-      <div style="font-size:12px;font-family:'DM Mono',monospace;color:var(--text2)">${potency}</div>
-      <div class="p-price">${p.price > 0 ? '$' + p.price : '—'}</div>
-      <div>${stockPill}</div>
-      <div><button class="btn-edit" onclick="event.stopPropagation();openProductModal('${p.id}')">Edit</button></div>
-    </div>`;
-  }).join('');
+  const el = document.getElementById('inventory-list');
+  if (!list.length) { el.innerHTML = '<div class="empty-state">No items found.</div>'; return; }
+  el.innerHTML = list.map(p => `
+    <div class="data-row inv-row">
+      <div><div class="d-name">${p.name}</div><div class="d-sub">${p.brand||'—'}</div></div>
+      <div><span class="pill pill-gray">${p.category||'other'}</span></div>
+      <div class="d-mono">${p.price > 0 ? '$'+Number(p.price).toFixed(2) : '—'}</div>
+      <div class="d-mono">${p.thc ? p.thc+'%' : '—'}</div>
+      <div style="font-size:12px;color:var(--text3);text-transform:capitalize">${p.strain_type||'—'}</div>
+      <div><span class="pill ${p.in_stock ? 'pill-green' : 'pill-amber'}">${p.in_stock ? 'In stock' : 'Out of stock'}</span></div>
+    </div>`).join('');
 }
 
 function filterInventory() {
-  const q   = document.getElementById('search-input').value.toLowerCase();
-  const cat = document.getElementById('cat-filter').value;
-  const st  = document.getElementById('stock-filter').value;
-  renderInventory(allProducts.filter(p => {
-    const mq = !q || p.name.toLowerCase().includes(q) || (p.brand||'').toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q);
+  const q = document.getElementById('inv-search').value.toLowerCase();
+  const cat = document.getElementById('inv-cat').value;
+  const stock = document.getElementById('inv-stock').value;
+  renderInventory(allItems.filter(p => {
+    const mq = !q || p.name.toLowerCase().includes(q) || (p.brand||'').toLowerCase().includes(q);
     const mc = !cat || p.category === cat;
-    const ms = !st || (st === 'instock' && p.in_stock) || (st === 'oos' && !p.in_stock);
+    const ms = !stock || (stock === 'in' ? p.in_stock : !p.in_stock);
     return mq && mc && ms;
   }));
 }
 
-// ── Manual sync trigger ───────────────────────────────────────────────────────
 async function triggerSync() {
-  const btn = document.getElementById('sync-now-btn');
-  btn.disabled = true; btn.textContent = '↻ Syncing...';
+  showToast('Syncing...','');
   try {
-    const res = await fetch(`${WORKER_URL}/api/sync/${CLIENT_ID}`, { method: 'POST' });
-    const json = await res.json();
-    if (json.status === 'success') {
-      showToast(`Synced ${json.productCount} products`, 'success');
-      await loadInventory();
-      await loadSyncStatus();
-    } else {
-      showToast('Sync failed: ' + (json.error || 'unknown error'), 'error');
-    }
-  } catch {
-    showToast('Could not reach sync service', 'error');
-  }
-  btn.disabled = false; btn.textContent = '↻ Sync now';
+    await fetch(`${WORKER_URL}/api/sync/${CLIENT_ID}`, { method: 'POST' });
+    await Promise.all([loadInventory(), loadOverview()]);
+    showToast('Synced','success');
+  } catch { showToast('Sync failed','error'); }
 }
 
-// ── Product modal ─────────────────────────────────────────────────────────────
-function openProductModal(id) {
-  editProdId = id;
-  const isNew = id === null;
-  document.getElementById('pm-title').textContent = isNew ? 'Add product' : 'Edit product';
-  document.getElementById('p-delete-btn').style.display = isNew ? 'none' : 'block';
-  document.getElementById('p-save-btn').textContent = isNew ? 'Add product' : 'Save changes';
-
-  if (isNew) {
-    ['f-name','f-brand','f-description','f-thc','f-cbd','f-price','f-qty','f-effects'].forEach(k => document.getElementById(k).value = '');
-    document.getElementById('f-category').value = 'flower';
-    document.getElementById('f-strain').value = '';
-    document.getElementById('f-instock').checked = true;
-    document.getElementById('pm-sub').textContent = 'manual entry';
-    document.getElementById('f-source-note').textContent = '';
-  } else {
-    const p = allProducts.find(x => x.id === id); if (!p) return;
-    document.getElementById('pm-sub').textContent = p.source_id || p.id;
-    document.getElementById('f-name').value = p.name || '';
-    document.getElementById('f-brand').value = p.brand || '';
-    document.getElementById('f-category').value = p.category || 'flower';
-    document.getElementById('f-strain').value = p.strain_type || '';
-    document.getElementById('f-description').value = p.description || '';
-    document.getElementById('f-thc').value = p.thc ?? '';
-    document.getElementById('f-cbd').value = p.cbd ?? '';
-    document.getElementById('f-price').value = p.price ?? '';
-    document.getElementById('f-qty').value = p.quantity > 0 ? p.quantity : '';
-    document.getElementById('f-effects').value = (p.effects || []).join(', ');
-    document.getElementById('f-instock').checked = !!p.in_stock;
-
-    if (p.source !== 'manual') {
-      document.getElementById('f-source-note').textContent =
-        `This product is auto-synced from ${p.source}. Your edits will be overwritten on next sync unless you change the source to "manual".`;
-    } else {
-      document.getElementById('f-source-note').textContent = '';
-    }
-  }
-  document.getElementById('product-overlay').classList.add('open');
-}
-
-async function saveProduct() {
-  const btn = document.getElementById('p-save-btn');
-  btn.disabled = true; btn.textContent = 'Saving...';
-
-  const name = document.getElementById('f-name').value.trim();
-  if (!name) { showToast('Name is required', 'error'); btn.disabled = false; btn.textContent = 'Save'; return; }
-
-  const payload = {
-    client_id:   CLIENT_ID,
-    name,
-    brand:       document.getElementById('f-brand').value.trim() || '',
-    category:    document.getElementById('f-category').value,
-    strain_type: document.getElementById('f-strain').value || null,
-    description: document.getElementById('f-description').value.trim(),
-    thc:         parseFloat(document.getElementById('f-thc').value) || null,
-    cbd:         parseFloat(document.getElementById('f-cbd').value) || null,
-    price:       parseFloat(document.getElementById('f-price').value) || 0,
-    quantity:    parseInt(document.getElementById('f-qty').value) || -1,
-    effects:     document.getElementById('f-effects').value.split(',').map(s=>s.trim()).filter(Boolean),
-    in_stock:    document.getElementById('f-instock').checked,
-    source:      'manual',
-    last_synced_at: new Date().toISOString(),
-  };
-
-  let error;
-  if (editProdId) {
-    ({ error } = await db.from('menu_items').update(payload).eq('id', editProdId).eq('client_id', CLIENT_ID));
-  } else {
-    payload.id = `manual_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-    ({ error } = await db.from('menu_items').insert(payload));
-  }
-
-  btn.disabled = false; btn.textContent = 'Save changes';
-  if (error) { showToast('Save failed: ' + error.message, 'error'); return; }
-  closeModal('product-overlay');
-  await loadInventory();
-  showToast(editProdId ? 'Product updated' : 'Product added', 'success');
-}
-
-async function deleteProduct() {
-  if (!editProdId || !confirm('Delete this product?')) return;
-  const { error } = await db.from('menu_items').delete().eq('id', editProdId).eq('client_id', CLIENT_ID);
-  if (error) { showToast('Delete failed', 'error'); return; }
-  closeModal('product-overlay');
-  await loadInventory();
-  showToast('Product deleted', 'success');
-}
-
-// ── Deals ─────────────────────────────────────────────────────────────────────
+// DEALS
 async function loadDeals() {
   const { data, error } = await db.from('deals').select('*').eq('client_id', CLIENT_ID).order('created_at');
-  if (error) { showToast('Failed to load deals', 'error'); return; }
+  if (error) { showToast('Failed to load deals','error'); return; }
   allDeals = data || [];
   document.getElementById('deal-count').textContent = allDeals.length;
   renderDeals(allDeals);
@@ -573,28 +473,20 @@ async function loadDeals() {
 
 function renderDeals(list) {
   const el = document.getElementById('deals-grid');
-  if (!list.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:3rem;text-align:center;color:var(--text3);font-size:13px">No deals yet. Add your first one.</div>'; return; }
+  if (!list.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:3rem;text-align:center;color:var(--text3);font-size:13px">No deals yet. Add one to have your bot start promoting it.</div>'; return; }
   el.innerHTML = list.map(d => `
-    <div class="deal-card ${d.active?'active-card':'inactive'}" id="dc-${d.id}">
+    <div class="deal-card ${d.active ? 'active-card' : 'inactive'}" id="dc-${d.id}">
       <div class="deal-name">${d.name}</div>
       <div class="deal-desc">${d.description||''}</div>
-      ${d.notes?`<div class="deal-notes">${d.notes}</div>`:''}
+      ${d.notes ? `<div class="deal-notes">${d.notes}</div>` : ''}
       <div class="deal-footer">
         <span class="deal-cta-tag">${d.cta||''}</span>
         <div class="deal-actions">
           <button class="btn-edit" onclick="openDealModal('${d.id}')">Edit</button>
-          <button class="toggle-btn ${d.active?'on':'off'}" onclick="toggleDeal('${d.id}')"></button>
+          <button class="toggle-btn ${d.active?'on':'off'}" id="tg-${d.id}" onclick="toggleDeal('${d.id}')"></button>
         </div>
       </div>
     </div>`).join('');
-}
-
-async function toggleDeal(id) {
-  const deal = allDeals.find(d => d.id === id); if (!deal) return;
-  const { error } = await db.from('deals').update({ active: !deal.active }).eq('id', id);
-  if (error) { showToast('Update failed', 'error'); return; }
-  await loadDeals();
-  showToast(deal.active ? 'Deal deactivated' : 'Deal activated', 'success');
 }
 
 function openDealModal(id) {
@@ -604,12 +496,12 @@ function openDealModal(id) {
   document.getElementById('d-delete-btn').style.display = isNew ? 'none' : 'block';
   document.getElementById('d-save-btn').textContent = isNew ? 'Add deal' : 'Save changes';
   if (isNew) {
-    ['d-name','d-desc','d-cta','d-url','d-notes'].forEach(k=>document.getElementById(k).value='');
+    ['d-name','d-desc','d-cta','d-url','d-notes'].forEach(k => document.getElementById(k).value = '');
     document.getElementById('d-active').checked = true;
     document.getElementById('dm-id').textContent = 'new deal';
   } else {
-    const d = allDeals.find(x=>x.id===id); if (!d) return;
-    document.getElementById('dm-id').textContent = d.id;
+    const d = allDeals.find(x => x.id === id); if (!d) return;
+    document.getElementById('dm-id').textContent = d.deal_id||'';
     document.getElementById('d-name').value = d.name||'';
     document.getElementById('d-desc').value = d.description||'';
     document.getElementById('d-cta').value = d.cta||'';
@@ -636,25 +528,68 @@ async function saveDeal() {
   if (editDealId) {
     ({ error } = await db.from('deals').update(payload).eq('id', editDealId));
   } else {
+    payload.deal_id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').substring(0,30);
     ({ error } = await db.from('deals').insert(payload));
   }
-  btn.disabled = false; btn.textContent = 'Save';
-  if (error) { showToast('Save failed: '+error.message,'error'); return; }
+  btn.disabled = false;
+  if (error) { showToast('Save failed: '+error.message,'error'); btn.textContent = 'Save changes'; return; }
   closeModal('deal-overlay');
-  await loadDeals();
-  showToast(editDealId ? 'Deal updated' : 'Deal added', 'success');
+  await loadDeals(); await loadOverview();
+  showSaved(); showToast(editDealId ? 'Deal updated' : 'Deal added','success');
 }
 
 async function deleteDeal() {
   if (!editDealId || !confirm('Delete this deal?')) return;
   const { error } = await db.from('deals').delete().eq('id', editDealId);
   if (error) { showToast('Delete failed','error'); return; }
-  closeModal('deal-overlay');
-  await loadDeals();
+  closeModal('deal-overlay'); await loadDeals();
   showToast('Deal deleted','success');
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+async function toggleDeal(id) {
+  const d = allDeals.find(x => x.id === id); if (!d) return;
+  const next = !d.active;
+  const { error } = await db.from('deals').update({ active: next }).eq('id', id);
+  if (error) { showToast('Update failed','error'); return; }
+  d.active = next;
+  document.getElementById('dc-'+id).classList.toggle('active-card', next);
+  document.getElementById('dc-'+id).classList.toggle('inactive', !next);
+  document.getElementById('tg-'+id).className = 'toggle-btn '+(next?'on':'off');
+  showSaved(); showToast(next ? 'Deal activated' : 'Deal paused','success');
+}
+
+// LEADS
+async function loadLeads() {
+  const { data, error } = await db.from('leads').select('*').eq('client_id', CLIENT_ID).order('created_at', { ascending: false });
+  if (error) { showToast('Failed to load leads','error'); return; }
+  allLeads = data || [];
+  document.getElementById('leads-count').textContent = allLeads.length;
+  renderLeads(allLeads);
+}
+
+function renderLeads(list) {
+  const el = document.getElementById('leads-list');
+  if (!list.length) { el.innerHTML = '<div class="empty-state">No leads yet. Make sure your widget is live on your site.</div>'; return; }
+  el.innerHTML = list.map(l => `
+    <div class="data-row leads-row">
+      <div style="font-size:13px;font-weight:500;color:var(--green-dark)">${l.email||'—'}</div>
+      <div class="d-mono">${l.name||'—'}</div>
+      <div class="d-mono">${l.phone||'—'}</div>
+      <div class="d-mono">${l.source||'chat_widget'}</div>
+      <div class="d-mono">${new Date(l.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+    </div>`).join('');
+}
+
+function exportLeads() {
+  if (!allLeads.length) { showToast('No leads to export',''); return; }
+  const rows = [['Email','Name','Phone','Source','Date'],...allLeads.map(l=>[l.email||'',l.name||'',l.phone||'',l.source||'',new Date(l.created_at).toLocaleDateString()])];
+  const csv = rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download = 'cannaflow-leads.csv'; a.click();
+}
+
+// UTILS
 function switchTab(e, tab) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -662,21 +597,23 @@ function switchTab(e, tab) {
   document.getElementById('tab-'+tab).classList.add('active');
 }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-function formatAge(d) {
-  const ms = Date.now()-new Date(d).getTime();
-  if (ms < 60000) return 'just now';
-  if (ms < 3600000) return Math.floor(ms/60000)+'m ago';
-  if (ms < 86400000) return Math.floor(ms/3600000)+'h ago';
-  return Math.floor(ms/86400000)+'d ago';
-}
+function overlayClick(e, id) { if (e.target.id===id) closeModal(id); }
 let toastT;
 function showToast(msg, type='') {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.className='toast show'+(type?' '+type:'');
-  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'),3000);
+  t.textContent = msg; t.className = 'toast show'+(type?' '+type:'');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 3000);
 }
-
-init();
+function showSaved() {
+  const s = document.getElementById('save-status');
+  s.classList.add('show'); setTimeout(()=>s.classList.remove('show'), 2500);
+}
+document.getElementById('login-password').addEventListener('keydown', e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('login-email').addEventListener('keydown', e=>{if(e.key==='Enter')document.getElementById('login-password').focus();});
+(async()=>{
+  const { data: { session } } = await db.auth.getSession();
+  if (session) { SESSION = session; await loadDashboard(); }
+})();
 </script>
 </body>
 </html>
