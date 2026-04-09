@@ -1,0 +1,862 @@
+import { syncClient, syncAll, getProducts, getCatalogSummary } from './2_worker_inventory.js';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// ── Supabase helper (inline so index.js stays self-contained) ─────────────────
+function supa(env) {
+  const url = env.SUPABASE_URL, key = env.SUPABASE_SERVICE_KEY;
+  const h = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+  return {
+    async get(table, eq = {}) {
+      const qs = Object.entries(eq).map(([k,v]) => `${k}=eq.${v}`).join('&');
+      const r = await fetch(`${url}/rest/v1/${table}?select=*${qs ? '&'+qs : ''}`, { headers: h });
+      if (!r.ok) throw new Error(`Supabase GET ${table}: ${r.status} ${await r.text()}`);
+      return r.json();
+    },
+    async insert(table, body) {
+      const r = await fetch(`${url}/rest/v1/${table}`, {
+        method: 'POST', headers: { ...h, Prefer: 'return=minimal' }, body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error(`Supabase POST ${table}: ${r.status} ${await r.text()}`);
+    },
+  };
+}
+
+// ── Build compact inventory text for Claude system prompt ────────────────────
+function buildInventoryContext(products) {
+  if (!products.length) return 'No products currently in stock.';
+  const byCategory = {};
+  for (const p of products) {
+    const cat = p.category || 'other';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(p);
+  }
+  return Object.entries(byCategory).map(([cat, items]) => {
+    const list = items.slice(0, 12).map(p => {
+      const parts = [];
+      if (p.price > 0) parts.push(`$${p.price}`);
+      if (p.thc)       parts.push(`${p.thc}%THC`);
+      if (p.strain_type) parts.push(p.strain_type);
+      return `${p.id}|${p.name}${parts.length ? ' ('+parts.join(',')+')' : ''}`;
+    });
+    return `[${cat.toUpperCase()}]\n${list.join('\n')}`;
+  }).join('\n\n');
+}
+
+// ── Chat handler ─────────────────────────────────────────────────────────────
+async function handleChat(clientId, body, env) {
+  const db = supa(env);
+
+  // Fetch client info + current inventory in parallel
+  const [clients, products] = await Promise.all([
+    db.get('clients', { id: clientId }),
+    db.get('menu_items', { client_id: clientId }),
+  ]);
+
+  const client = clients?.[0];
+  if (!client) return { message: "Sorry, I couldn't find this dispensary.", products: [] };
+
+  const inStock = (products || []).filter(p => p.in_stock !== false);
+  const inventoryCtx = buildInventoryContext(inStock);
+
+  const systemPrompt =
+`You are a friendly, knowledgeable AI budtender for ${client.name || 'this dispensary'}.
+Keep every response to 2–3 sentences maximum. Be warm and helpful. Never give medical advice.
+Always note that customers must be 21+ to purchase.
+
+CURRENT IN-STOCK INVENTORY (${inStock.length} products):
+${inventoryCtx}
+
+CRITICAL RESPONSE FORMAT — respond ONLY with valid JSON, no markdown, no extra text:
+{"message":"Your 2–3 sentence reply here","productIds":["exact_product_id_1","exact_product_id_2"]}
+
+When not recommending specific products use:
+{"message":"Your reply","productIds":[]}
+
+Product IDs are the first field before | in each inventory line above. Use exact IDs.`;
+
+  const { message, history = [], quizAnswers = {}, greeting = '' } = body;
+
+  // Build context from quiz answers if present
+  let userContent = message;
+  if (Object.keys(quizAnswers).length) {
+    const qa = Object.entries(quizAnswers).map(([k,v]) => `${k}: ${v}`).join(', ');
+    userContent += `\n[Customer profile: ${qa}]`;
+  }
+
+  const messages = [
+    ...(history || []).filter(m => m.role && m.content).map(m => ({ role: m.role, content: m.content })),
+    { role: 'user', content: userContent },
+  ];
+
+  // Call Claude
+  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 350,
+      system: systemPrompt,
+      messages,
+    }),
+  });
+
+  if (!claudeRes.ok) {
+    const err = await claudeRes.text();
+    throw new Error(`Claude API ${claudeRes.status}: ${err}`);
+  }
+
+  const claudeData = await claudeRes.json();
+  const rawText = claudeData.content?.[0]?.text || '{"message":"Sorry, I had trouble with that — please try again!","productIds":[]}';
+
+  // Parse Claude's JSON response
+  let parsed = { message: '', productIds: [] };
+  try {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    parsed = JSON.parse(jsonMatch?.[0] || rawText);
+  } catch {
+    parsed = { message: rawText.replace(/^[^a-zA-Z]*/, '').slice(0, 300), productIds: [] };
+  }
+
+  // Resolve product IDs to full product objects
+  const recommended = (parsed.productIds || [])
+    .map(id => inStock.find(p => p.id === id || p.source_id === String(id)))
+    .filter(Boolean)
+    .slice(0, 5);
+
+  return {
+    message: (greeting + (parsed.message || '')).trim(),
+    products: recommended,
+  };
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    try {
+
+      // ── GET /api/config/:clientId — widget branding ─────────────────────
+      if (request.method === 'GET' && url.pathname.startsWith('/api/config/')) {
+        const clientId = url.pathname.split('/')[3];
+        const db = supa(env);
+        const rows = await db.get('clients', { id: clientId });
+        const client = rows?.[0];
+        if (!client) return Response.json({ error: 'not found' }, { status: 404, headers: corsHeaders });
+        return Response.json({
+          name:        client.name        || 'Your Dispensary',
+          botName:     client.bot_name    || 'Budtender AI',
+          accentColor: client.accent_color || '#2d6a4f',
+          orderUrl:    client.order_url   || client.website_url || '#',
+          emoji:       client.bot_emoji   || '🌿',
+        }, { headers: corsHeaders });
+      }
+
+      // ── POST /api/chat/:clientId — AI budtender ─────────────────────────
+      if (request.method === 'POST' && url.pathname.startsWith('/api/chat/')) {
+        const clientId = url.pathname.split('/')[3];
+        const body = await request.json();
+        const result = await handleChat(clientId, body, env);
+        return Response.json(result, { headers: corsHeaders });
+      }
+
+      // ── POST /api/lead/:clientId — save lead ────────────────────────────
+      if (request.method === 'POST' && url.pathname.startsWith('/api/lead/')) {
+        const clientId = url.pathname.split('/')[3];
+        const { name, email, phone, source, url: pageUrl } = await request.json();
+        if (!email && !phone) return Response.json({ error: 'email or phone required' }, { status: 400, headers: corsHeaders });
+        const db = supa(env);
+        await db.insert('leads', {
+          client_id: clientId,
+          name: name || null,
+          email: email || null,
+          phone: phone || null,
+          source: source || 'chat_widget',
+          page_url: pageUrl || null,
+        });
+        return Response.json({ success: true }, { headers: corsHeaders });
+      }
+
+      // ── POST /api/sync/:clientId — trigger inventory sync ───────────────
+      if (request.method === 'POST' && url.pathname.startsWith('/api/sync/')) {
+        const clientId = url.pathname.split('/')[3];
+        const result = await syncClient(clientId, env);
+        return Response.json(result, { headers: corsHeaders });
+      }
+
+      // ── GET /api/products/:clientId — inventory for chatbot ─────────────
+      if (url.pathname.startsWith('/api/products/')) {
+        const clientId = url.pathname.split('/')[3];
+        const products = await getProducts(clientId, env);
+        return Response.json(products, { headers: corsHeaders });
+      }
+
+      // ── GET /api/catalog-summary/:clientId ──────────────────────────────
+      if (url.pathname.startsWith('/api/catalog-summary/')) {
+        const clientId = url.pathname.split('/')[3];
+        const summary = await getCatalogSummary(clientId, env);
+        return Response.json(summary, { headers: corsHeaders });
+      }
+
+      // ── GET /api/debug/:clientId — verify Supabase connection ───────────
+      if (url.pathname.startsWith('/api/debug/')) {
+        const clientId = url.pathname.split('/')[3];
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/clients?select=*&id=eq.${clientId}`, {
+          headers: { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
+        });
+        return Response.json({ httpStatus: res.status, rows: await res.json() }, { headers: corsHeaders });
+      }
+
+      // ── GET / — serve the client portal ────────────────────────────────────
+      if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '')) {
+        return new Response(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CannaFlow — Client Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface2: #f4f3ef;
+  --surface3: #eceae4;
+  --text: #1c1b18;
+  --text2: #5a5850;
+  --text3: #9b9890;
+  --border: rgba(28,27,24,0.08);
+  --border2: rgba(28,27,24,0.14);
+  --green: #1a8f68;
+  --green-bg: #eaf6f1;
+  --green-dark: #0f6049;
+  --amber: #c47c1a;
+  --amber-bg: #fdf3e3;
+  --red: #b83232;
+  --red-bg: #fdf0f0;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-modal: 0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08);
+}
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+
+/* LOGIN */
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 40px; width: 400px; box-shadow: var(--shadow-modal); animation: slideUp 0.2s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.login-logo { font-size: 22px; font-weight: 500; letter-spacing: -0.5px; margin-bottom: 6px; }
+.login-logo em { color: var(--green); font-style: normal; }
+.login-sub { font-size: 13px; color: var(--text3); margin-bottom: 28px; }
+.login-field { margin-bottom: 14px; }
+.login-label { font-size: 12px; font-weight: 500; color: var(--text2); display: block; margin-bottom: 5px; }
+.login-input { width: 100%; font-size: 14px; font-family: 'DM Sans', sans-serif; padding: 9px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; }
+.login-input:focus { border-color: var(--green); }
+.login-btn { width: 100%; margin-top: 4px; padding: 10px; background: var(--green); color: white; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; border: none; border-radius: var(--radius); cursor: pointer; transition: background 0.15s; }
+.login-btn:hover { background: var(--green-dark); }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-error { margin-top: 12px; font-size: 13px; color: var(--red); background: var(--red-bg); padding: 9px 12px; border-radius: var(--radius); display: none; }
+.login-forgot { display: block; text-align: center; margin-top: 14px; font-size: 13px; color: var(--text3); }
+
+/* TOPBAR */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 58px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; }
+.logo { font-size: 18px; font-weight: 500; letter-spacing: -0.5px; }
+.logo em { color: var(--green); font-style: normal; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.client-chip { font-size: 12px; font-family: 'DM Mono', monospace; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; color: var(--text2); }
+.save-status { font-size: 12px; color: var(--green); opacity: 0; transition: opacity 0.3s; display: flex; align-items: center; gap: 5px; }
+.save-status.show { opacity: 1; }
+.logout-link { font-size: 12px; color: var(--text3); cursor: pointer; padding: 4px 8px; border-radius: var(--radius); transition: background 0.12s; }
+.logout-link:hover { background: var(--surface2); color: var(--text2); }
+
+/* MAIN */
+.main { max-width: 1140px; margin: 0 auto; padding: 2rem; }
+.tabs { display: flex; gap: 2px; margin-bottom: 1.5rem; background: var(--surface2); border-radius: var(--radius); padding: 3px; width: fit-content; }
+.tab { font-size: 13px; font-weight: 500; padding: 7px 18px; cursor: pointer; color: var(--text3); border-radius: 6px; border: none; background: transparent; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
+.tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tab:hover:not(.active) { color: var(--text2); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
+.search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 300px; }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
+.search-input { width: 100%; font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 12px 8px 34px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; }
+.search-input:focus { border-color: var(--green); }
+.filter-select { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text2); outline: none; cursor: pointer; }
+.btn-primary { font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; padding: 8px 18px; border: none; border-radius: var(--radius); background: var(--green); color: white; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+.btn-primary:hover { background: var(--green-dark); }
+.btn-ghost { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 14px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text2); cursor: pointer; transition: background 0.15s; }
+.btn-ghost:hover { background: var(--surface2); }
+
+/* TABLE */
+.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); }
+.table-head { display: grid; gap: 8px; padding: 10px 18px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+.col-h { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-family: 'DM Mono', monospace; }
+.inv-head { grid-template-columns: 2fr 100px 80px 70px 80px 100px; }
+.inv-row  { grid-template-columns: 2fr 100px 80px 70px 80px 100px; }
+.leads-head { grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr; }
+.leads-row  { grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr; }
+.data-row { display: grid; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); align-items: center; transition: background 0.1s; }
+.data-row:last-child { border-bottom: none; }
+.data-row:hover { background: var(--bg); }
+.d-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.d-sub  { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 1px; }
+.d-mono { font-size: 13px; color: var(--text2); font-family: 'DM Mono', monospace; }
+.pill { display: inline-flex; align-items: center; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.pill-green { background: var(--green-bg); color: var(--green-dark); }
+.pill-amber { background: var(--amber-bg); color: var(--amber); }
+.pill-gray  { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+.loading-row { padding: 3rem; text-align: center; color: var(--text3); font-size: 13px; }
+.empty-state { padding: 4rem 2rem; text-align: center; color: var(--text3); font-size: 13px; }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--green); border-radius: 50%; animation: spin 0.65s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* STATS */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; box-shadow: var(--shadow); }
+.stat-label { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-family: 'DM Mono', monospace; margin-bottom: 8px; }
+.stat-value { font-size: 28px; font-weight: 500; color: var(--text); letter-spacing: -0.5px; }
+.stat-meta { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.status-row { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; box-shadow: var(--shadow); }
+.s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: var(--green); box-shadow: 0 0 5px rgba(26,143,104,0.4); }
+.dot-amber { background: var(--amber); }
+.dot-gray  { background: var(--text3); }
+.s-label  { font-size: 13px; font-weight: 500; }
+.s-detail { font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; margin-left: auto; }
+
+/* DEALS */
+.deals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.deal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--shadow); transition: opacity 0.2s, border-color 0.2s; }
+.deal-card.inactive { opacity: 0.4; }
+.deal-card.active-card { border-color: rgba(26,143,104,0.3); }
+.deal-name { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+.deal-desc { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 10px; }
+.deal-notes { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-bottom: 12px; padding: 6px 10px; background: var(--surface2); border-radius: 6px; }
+.deal-footer { display: flex; align-items: center; justify-content: space-between; }
+.deal-cta-tag { font-size: 11px; color: var(--text3); background: var(--surface2); padding: 3px 10px; border-radius: 20px; }
+.deal-actions { display: flex; align-items: center; gap: 8px; }
+.toggle-btn { width: 36px; height: 20px; border-radius: 10px; border: none; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+.toggle-btn.on { background: var(--green); }
+.toggle-btn.off { background: var(--surface3); }
+.toggle-btn::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: white; top: 3px; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle-btn.on::after { left: 19px; }
+.toggle-btn.off::after { left: 3px; }
+.btn-edit { font-size: 11px; font-family: 'DM Sans', sans-serif; padding: 5px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; }
+.btn-edit:hover { background: var(--surface2); }
+
+/* MODAL */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px); }
+.overlay.open { display: flex; }
+.modal { background: var(--surface); border-radius: var(--radius-lg); width: 560px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-modal); animation: slideUp 0.18s ease; }
+.modal-header { padding: 20px 24px 16px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.modal-title { font-size: 16px; font-weight: 500; }
+.modal-subtitle { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: 'DM Mono', monospace; }
+.modal-close { font-size: 22px; color: var(--text3); cursor: pointer; background: none; border: none; line-height: 1; padding: 2px; transition: color 0.12s; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px 24px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-full { grid-column: 1 / -1; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--text2); }
+.form-hint { font-size: 11px; color: var(--text3); font-weight: 400; }
+.form-input, .form-select, .form-textarea { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 11px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; width: 100%; }
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--green); }
+.form-textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
+.check-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); cursor: pointer; }
+.check-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--green); cursor: pointer; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface); position: sticky; bottom: 0; }
+.btn-danger { font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 8px 14px; border: 1px solid rgba(184,50,50,0.3); border-radius: var(--radius); background: transparent; color: var(--red); cursor: pointer; transition: background 0.12s; }
+.btn-danger:hover { background: var(--red-bg); }
+.footer-actions { display: flex; gap: 8px; }
+.btn-save { font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; padding: 8px 22px; border: none; border-radius: var(--radius); background: var(--green); color: white; cursor: pointer; transition: background 0.15s; }
+.btn-save:hover { background: var(--green-dark); }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--text); color: white; font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 11px 22px; border-radius: var(--radius); z-index: 999; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { background: var(--green-dark); }
+.toast.error { background: var(--red); }
+.count-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-family: 'DM Mono', monospace; background: var(--surface2); color: var(--text3); border-radius: 10px; padding: 1px 7px; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">Canna<em>Flow</em></div>
+    <div class="login-sub">Sign in to your client portal</div>
+    <div class="login-field">
+      <label class="login-label">Email</label>
+      <input class="login-input" type="email" id="login-email" placeholder="you@dispensary.com" autocomplete="email"/>
+    </div>
+    <div class="login-field">
+      <label class="login-label">Password</label>
+      <input class="login-input" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+    <span class="login-forgot">Forgot your password?</span>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="topbar">
+    <div class="logo">Canna<em>Flow</em></div>
+    <div class="topbar-right">
+      <div class="save-status" id="save-status">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Saved
+      </div>
+      <div class="client-chip" id="client-chip">Loading...</div>
+      <span class="logout-link" onclick="doLogout()">Sign out</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab(event,'overview')">Overview</button>
+      <button class="tab" onclick="switchTab(event,'inventory')">Inventory <span class="count-badge" id="inventory-count">—</span></button>
+      <button class="tab" onclick="switchTab(event,'deals')">Deals <span class="count-badge" id="deal-count">—</span></button>
+      <button class="tab" onclick="switchTab(event,'leads')">Leads <span class="count-badge" id="leads-count">—</span></button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">In Stock</div>
+          <div class="stat-value" id="ov-instock">—</div>
+          <div class="stat-meta" id="ov-total">of — products</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Deals</div>
+          <div class="stat-value" id="ov-deals">—</div>
+          <div class="stat-meta">bot is promoting these</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Leads Captured</div>
+          <div class="stat-value" id="ov-leads">—</div>
+          <div class="stat-meta">from chat widget</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Last Sync</div>
+          <div class="stat-value" style="font-size:18px;padding-top:4px" id="ov-sync">—</div>
+          <div class="stat-meta" id="ov-platform">—</div>
+        </div>
+      </div>
+      <div id="status-list"><div class="loading-row"><span class="spinner"></span>Loading status...</div></div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="tab-panel" id="tab-inventory">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input class="search-input" type="text" id="inv-search" placeholder="Search menu items..." oninput="filterInventory()"/>
+        </div>
+        <select class="filter-select" id="inv-cat" onchange="filterInventory()">
+          <option value="">All categories</option>
+          <option value="flower">Flower</option>
+          <option value="pre-roll">Pre-roll</option>
+          <option value="vape">Vape</option>
+          <option value="concentrate">Concentrate</option>
+          <option value="edible">Edible</option>
+          <option value="tincture">Tincture</option>
+          <option value="topical">Topical</option>
+          <option value="other">Other</option>
+        </select>
+        <select class="filter-select" id="inv-stock" onchange="filterInventory()">
+          <option value="">All stock</option>
+          <option value="in">In stock</option>
+          <option value="out">Out of stock</option>
+        </select>
+        <button class="btn-primary" onclick="triggerSync()">↻ Sync inventory</button>
+      </div>
+      <div class="table-card">
+        <div class="table-head inv-head">
+          <div class="col-h">Product</div>
+          <div class="col-h">Category</div>
+          <div class="col-h">Price</div>
+          <div class="col-h">THC</div>
+          <div class="col-h">Strain</div>
+          <div class="col-h">Status</div>
+        </div>
+        <div id="inventory-list"><div class="loading-row"><span class="spinner"></span>Loading inventory...</div></div>
+      </div>
+    </div>
+
+    <!-- DEALS -->
+    <div class="tab-panel" id="tab-deals">
+      <div class="toolbar">
+        <div style="font-size:13px;color:var(--text2);flex:1">Toggle deals on/off — your bot updates within 5 minutes.</div>
+        <button class="btn-primary" onclick="openDealModal(null)">+ Add deal</button>
+      </div>
+      <div class="deals-grid" id="deals-grid">
+        <div class="loading-row" style="grid-column:1/-1"><span class="spinner"></span>Loading deals...</div>
+      </div>
+    </div>
+
+    <!-- LEADS -->
+    <div class="tab-panel" id="tab-leads">
+      <div class="toolbar">
+        <div style="font-size:13px;color:var(--text2);flex:1">Customers who shared contact info through your AI chat widget.</div>
+        <button class="btn-ghost" onclick="exportLeads()">↓ Export CSV</button>
+      </div>
+      <div class="table-card">
+        <div class="table-head leads-head">
+          <div class="col-h">Email</div>
+          <div class="col-h">Name</div>
+          <div class="col-h">Phone</div>
+          <div class="col-h">Source</div>
+          <div class="col-h">Date</div>
+        </div>
+        <div id="leads-list"><div class="loading-row"><span class="spinner"></span>Loading leads...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Deal modal -->
+<div class="overlay" id="deal-overlay" onclick="overlayClick(event,'deal-overlay')">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="dm-title">Edit deal</div>
+        <div class="modal-subtitle" id="dm-id"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('deal-overlay')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group form-full"><label class="form-label">Deal name</label><input class="form-input" id="d-name" placeholder="e.g. First-time patient discount"/></div>
+        <div class="form-group form-full"><label class="form-label">Description</label><textarea class="form-textarea" id="d-desc" placeholder="Describe the deal your bot will promote..."></textarea></div>
+        <div class="form-group"><label class="form-label">Call to action</label><input class="form-input" id="d-cta" placeholder="Shop Now"/></div>
+        <div class="form-group"><label class="form-label">URL <span class="form-hint">(optional)</span></label><input class="form-input" id="d-url" placeholder="https://yourdispensary.com/menu"/></div>
+        <div class="form-group form-full"><label class="form-label">Internal notes <span class="form-hint">(bot guidance, not shown to customers)</span></label><input class="form-input" id="d-notes" placeholder="e.g. Only mention for first-time patients"/></div>
+        <div class="form-group form-full"><label class="check-label"><input type="checkbox" id="d-active"/> Active — bot promotes this deal</label></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" id="d-delete-btn" onclick="deleteDeal()" style="display:none">Delete deal</button>
+      <div class="footer-actions">
+        <button class="btn-ghost" onclick="closeModal('deal-overlay')">Cancel</button>
+        <button class="btn-save" id="d-save-btn" onclick="saveDeal()">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPA_URL = 'https://pxbbmymmgszbxrfyktzk.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4YmJteW1tZ3N6YnhyZnlrdHprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI2MTQsImV4cCI6MjA5MDA2ODYxNH0._qz5beDaaJvIdqYhYsAvo8701uyj0sRKeFmCrBTWV5s'; // ← replace with anon key
+const WORKER_URL = 'https://portal.gocannaflow.com';
+
+const db = supabase.createClient(SUPA_URL, SUPA_KEY);
+let SESSION = null, CLIENT_ID = null;
+let allItems = [], allDeals = [], allLeads = [];
+let editDealId = null;
+
+// AUTH
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pw) { showLoginError('Please enter your email and password.'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pw });
+  if (error) { showLoginError(error.message); btn.disabled = false; btn.textContent = 'Sign in'; return; }
+  SESSION = data.session;
+  await loadDashboard();
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+function doLogout() {
+  db.auth.signOut();
+  SESSION = null; CLIENT_ID = null;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-btn').disabled = false;
+  document.getElementById('login-btn').textContent = 'Sign in';
+}
+
+async function loadDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  const { data: clients } = await db.from('clients').select('*').eq('user_id', SESSION.user.id);
+  const client = clients?.[0];
+  CLIENT_ID = client?.id || SESSION.user.app_metadata?.client_id;
+  if (!CLIENT_ID) { document.getElementById('client-chip').textContent = 'Account not linked'; return; }
+  document.getElementById('client-chip').textContent = client?.name || 'Your Dispensary';
+  await Promise.all([loadOverview(), loadInventory(), loadDeals(), loadLeads()]);
+}
+
+// OVERVIEW
+async function loadOverview() {
+  const [{ data: sync }, { data: leads }, { data: activeDeals }] = await Promise.all([
+    db.from('sync_status').select('*').eq('client_id', CLIENT_ID).single(),
+    db.from('leads').select('id').eq('client_id', CLIENT_ID),
+    db.from('deals').select('id').eq('client_id', CLIENT_ID).eq('active', true),
+  ]);
+  document.getElementById('ov-instock').textContent = sync?.in_stock_count ?? 0;
+  document.getElementById('ov-total').textContent = \`of \${sync?.product_count ?? 0} products\`;
+  document.getElementById('ov-deals').textContent = activeDeals?.length ?? 0;
+  document.getElementById('ov-leads').textContent = leads?.length ?? 0;
+  if (sync?.last_synced_at) {
+    document.getElementById('ov-sync').textContent = new Date(sync.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    document.getElementById('ov-platform').textContent = sync.platform || 'manual';
+  } else {
+    document.getElementById('ov-sync').textContent = 'Never';
+    document.getElementById('ov-platform').textContent = '—';
+  }
+  const s = sync?.status || 'pending';
+  const dot = s === 'success' ? 'dot-green' : s === 'error' ? 'dot-amber' : 'dot-gray';
+  document.getElementById('status-list').innerHTML = \`
+    <div class="status-row"><div class="s-dot \${dot}"></div><div class="s-label">Inventory Sync</div><div class="s-detail">\${sync?.platform||'manual'} · \${sync?.product_count||0} products · \${s}</div></div>
+    <div class="status-row"><div class="s-dot dot-green"></div><div class="s-label">AI Budtender</div><div class="s-detail">Claude Haiku · live</div></div>
+    <div class="status-row"><div class="s-dot dot-green"></div><div class="s-label">Lead Capture</div><div class="s-detail">\${leads?.length??0} total leads</div></div>\`;
+}
+
+// INVENTORY
+async function loadInventory() {
+  const { data, error } = await db.from('menu_items').select('*').eq('client_id', CLIENT_ID).order('category').order('name');
+  if (error) { showToast('Failed to load inventory','error'); return; }
+  allItems = data || [];
+  document.getElementById('inventory-count').textContent = allItems.length;
+  renderInventory(allItems);
+}
+
+function renderInventory(list) {
+  const el = document.getElementById('inventory-list');
+  if (!list.length) { el.innerHTML = '<div class="empty-state">No items found.</div>'; return; }
+  el.innerHTML = list.map(p => \`
+    <div class="data-row inv-row">
+      <div><div class="d-name">\${p.name}</div><div class="d-sub">\${p.brand||'—'}</div></div>
+      <div><span class="pill pill-gray">\${p.category||'other'}</span></div>
+      <div class="d-mono">\${p.price > 0 ? '$'+Number(p.price).toFixed(2) : '—'}</div>
+      <div class="d-mono">\${p.thc ? p.thc+'%' : '—'}</div>
+      <div style="font-size:12px;color:var(--text3);text-transform:capitalize">\${p.strain_type||'—'}</div>
+      <div><span class="pill \${p.in_stock ? 'pill-green' : 'pill-amber'}">\${p.in_stock ? 'In stock' : 'Out of stock'}</span></div>
+    </div>\`).join('');
+}
+
+function filterInventory() {
+  const q = document.getElementById('inv-search').value.toLowerCase();
+  const cat = document.getElementById('inv-cat').value;
+  const stock = document.getElementById('inv-stock').value;
+  renderInventory(allItems.filter(p => {
+    const mq = !q || p.name.toLowerCase().includes(q) || (p.brand||'').toLowerCase().includes(q);
+    const mc = !cat || p.category === cat;
+    const ms = !stock || (stock === 'in' ? p.in_stock : !p.in_stock);
+    return mq && mc && ms;
+  }));
+}
+
+async function triggerSync() {
+  showToast('Syncing...','');
+  try {
+    await fetch(\`\${WORKER_URL}/api/sync/\${CLIENT_ID}\`, { method: 'POST' });
+    await Promise.all([loadInventory(), loadOverview()]);
+    showToast('Synced','success');
+  } catch { showToast('Sync failed','error'); }
+}
+
+// DEALS
+async function loadDeals() {
+  const { data, error } = await db.from('deals').select('*').eq('client_id', CLIENT_ID).order('created_at');
+  if (error) { showToast('Failed to load deals','error'); return; }
+  allDeals = data || [];
+  document.getElementById('deal-count').textContent = allDeals.length;
+  renderDeals(allDeals);
+}
+
+function renderDeals(list) {
+  const el = document.getElementById('deals-grid');
+  if (!list.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:3rem;text-align:center;color:var(--text3);font-size:13px">No deals yet. Add one to have your bot start promoting it.</div>'; return; }
+  el.innerHTML = list.map(d => \`
+    <div class="deal-card \${d.active ? 'active-card' : 'inactive'}" id="dc-\${d.id}">
+      <div class="deal-name">\${d.name}</div>
+      <div class="deal-desc">\${d.description||''}</div>
+      \${d.notes ? \`<div class="deal-notes">\${d.notes}</div>\` : ''}
+      <div class="deal-footer">
+        <span class="deal-cta-tag">\${d.cta||''}</span>
+        <div class="deal-actions">
+          <button class="btn-edit" onclick="openDealModal('\${d.id}')">Edit</button>
+          <button class="toggle-btn \${d.active?'on':'off'}" id="tg-\${d.id}" onclick="toggleDeal('\${d.id}')"></button>
+        </div>
+      </div>
+    </div>\`).join('');
+}
+
+function openDealModal(id) {
+  editDealId = id;
+  const isNew = id === null;
+  document.getElementById('dm-title').textContent = isNew ? 'Add deal' : 'Edit deal';
+  document.getElementById('d-delete-btn').style.display = isNew ? 'none' : 'block';
+  document.getElementById('d-save-btn').textContent = isNew ? 'Add deal' : 'Save changes';
+  if (isNew) {
+    ['d-name','d-desc','d-cta','d-url','d-notes'].forEach(k => document.getElementById(k).value = '');
+    document.getElementById('d-active').checked = true;
+    document.getElementById('dm-id').textContent = 'new deal';
+  } else {
+    const d = allDeals.find(x => x.id === id); if (!d) return;
+    document.getElementById('dm-id').textContent = d.deal_id||'';
+    document.getElementById('d-name').value = d.name||'';
+    document.getElementById('d-desc').value = d.description||'';
+    document.getElementById('d-cta').value = d.cta||'';
+    document.getElementById('d-url').value = d.shop_url||'';
+    document.getElementById('d-notes').value = d.notes||'';
+    document.getElementById('d-active').checked = !!d.active;
+  }
+  document.getElementById('deal-overlay').classList.add('open');
+}
+
+async function saveDeal() {
+  const btn = document.getElementById('d-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  const payload = {
+    client_id: CLIENT_ID,
+    name: document.getElementById('d-name').value.trim(),
+    description: document.getElementById('d-desc').value.trim(),
+    cta: document.getElementById('d-cta').value.trim(),
+    shop_url: document.getElementById('d-url').value.trim(),
+    notes: document.getElementById('d-notes').value.trim(),
+    active: document.getElementById('d-active').checked,
+  };
+  let error;
+  if (editDealId) {
+    ({ error } = await db.from('deals').update(payload).eq('id', editDealId));
+  } else {
+    payload.deal_id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').substring(0,30);
+    ({ error } = await db.from('deals').insert(payload));
+  }
+  btn.disabled = false;
+  if (error) { showToast('Save failed: '+error.message,'error'); btn.textContent = 'Save changes'; return; }
+  closeModal('deal-overlay');
+  await loadDeals(); await loadOverview();
+  showSaved(); showToast(editDealId ? 'Deal updated' : 'Deal added','success');
+}
+
+async function deleteDeal() {
+  if (!editDealId || !confirm('Delete this deal?')) return;
+  const { error } = await db.from('deals').delete().eq('id', editDealId);
+  if (error) { showToast('Delete failed','error'); return; }
+  closeModal('deal-overlay'); await loadDeals();
+  showToast('Deal deleted','success');
+}
+
+async function toggleDeal(id) {
+  const d = allDeals.find(x => x.id === id); if (!d) return;
+  const next = !d.active;
+  const { error } = await db.from('deals').update({ active: next }).eq('id', id);
+  if (error) { showToast('Update failed','error'); return; }
+  d.active = next;
+  document.getElementById('dc-'+id).classList.toggle('active-card', next);
+  document.getElementById('dc-'+id).classList.toggle('inactive', !next);
+  document.getElementById('tg-'+id).className = 'toggle-btn '+(next?'on':'off');
+  showSaved(); showToast(next ? 'Deal activated' : 'Deal paused','success');
+}
+
+// LEADS
+async function loadLeads() {
+  const { data, error } = await db.from('leads').select('*').eq('client_id', CLIENT_ID).order('created_at', { ascending: false });
+  if (error) { showToast('Failed to load leads','error'); return; }
+  allLeads = data || [];
+  document.getElementById('leads-count').textContent = allLeads.length;
+  renderLeads(allLeads);
+}
+
+function renderLeads(list) {
+  const el = document.getElementById('leads-list');
+  if (!list.length) { el.innerHTML = '<div class="empty-state">No leads yet. Make sure your widget is live on your site.</div>'; return; }
+  el.innerHTML = list.map(l => \`
+    <div class="data-row leads-row">
+      <div style="font-size:13px;font-weight:500;color:var(--green-dark)">\${l.email||'—'}</div>
+      <div class="d-mono">\${l.name||'—'}</div>
+      <div class="d-mono">\${l.phone||'—'}</div>
+      <div class="d-mono">\${l.source||'chat_widget'}</div>
+      <div class="d-mono">\${new Date(l.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+    </div>\`).join('');
+}
+
+function exportLeads() {
+  if (!allLeads.length) { showToast('No leads to export',''); return; }
+  const rows = [['Email','Name','Phone','Source','Date'],...allLeads.map(l=>[l.email||'',l.name||'',l.phone||'',l.source||'',new Date(l.created_at).toLocaleDateString()])];
+  const csv = rows.map(r=>r.map(v=>\`"\${v}"\`).join(',')).join('\\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download = 'cannaflow-leads.csv'; a.click();
+}
+
+// UTILS
+function switchTab(e, tab) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function overlayClick(e, id) { if (e.target.id===id) closeModal(id); }
+let toastT;
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show'+(type?' '+type:'');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 3000);
+}
+function showSaved() {
+  const s = document.getElementById('save-status');
+  s.classList.add('show'); setTimeout(()=>s.classList.remove('show'), 2500);
+}
+document.getElementById('login-password').addEventListener('keydown', e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('login-email').addEventListener('keydown', e=>{if(e.key==='Enter')document.getElementById('login-password').focus();});
+(async()=>{
+  const { data: { session } } = await db.auth.getSession();
+  if (session) { SESSION = session; await loadDashboard(); }
+})();
+</script>
+</body>
+</html>
+`, {
+          headers: { ...corsHeaders, 'Content-Type': 'text/html;charset=UTF-8' },
+        });
+      }
+
+      return new Response('Not found', { status: 404, headers: corsHeaders });
+
+    } catch (err) {
+      return Response.json(
+        { error: err.message || 'Internal server error' },
+        { status: 500, headers: corsHeaders }
+      );
+    }
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(syncAll(env));
+  },
+};
